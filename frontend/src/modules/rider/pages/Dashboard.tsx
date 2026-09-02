@@ -1,0 +1,1 @@
+export function RiderDashboard(){return <section><h1 className="text-3xl font-bold text-brand-blue">Rider Dashboard</h1><div className="mt-6 grid gap-5 sm:grid-cols-3">{[["Today's Pickups","8"],["Completed","5"],["Pending","3"]].map(x=><div className="card p-6" key={x[0]}><p className="text-slate-500">{x[0]}</p><b className="text-3xl">{x[1]}</b></div>)}</div></section>}
