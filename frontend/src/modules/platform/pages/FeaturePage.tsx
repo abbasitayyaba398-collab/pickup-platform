@@ -1,0 +1,54 @@
+import { useEffect, useMemo, useState } from "react";
+import { useAuthStore } from "../../../store/auth.store";
+
+const API = (import.meta.env.VITE_API_URL || "http://localhost:5000/api").replace(/\/$/, "");
+
+type Props = { resource: string; title: string; description: string; riderOnly?: boolean };
+type RecordItem = { _id: string; title: string; status: string; data?: Record<string, unknown>; createdAt?: string };
+
+const labels: Record<string,string> = {
+  "pickup-plans":"Pickup Plan", pickups:"Pickup", carriers:"Carrier", "coverage-areas":"Coverage Area",
+  "addon-services":"Add-on Service", pricing:"Pricing", payments:"Payment", notifications:"Notification",
+  reports:"Report", settings:"Setting", "audit-logs":"Audit Log", addresses:"Address", "payment-methods":"Payment Method",
+  invoices:"Invoice", support:"Support Request", profiles:"Profile"
+};
+
+export function FeaturePage({ resource, title, description, riderOnly }: Props) {
+  const token = useAuthStore(s => s.token);
+  const [items,setItems] = useState<RecordItem[]>([]);
+  const [loading,setLoading] = useState(true);
+  const [form,setForm] = useState({title:"",status:"ACTIVE",details:""});
+  const [error,setError] = useState("");
+  const canDelete = useAuthStore(s => s.user?.role === "ADMIN");
+  const singular = useMemo(() => labels[resource] || title, [resource,title]);
+
+  async function load(){
+    if(!token) return;
+    setLoading(true); setError("");
+    try { const r=await fetch(`${API}/platform/${resource}`,{headers:{Authorization:`Bearer ${token}`}}); const j=await r.json(); if(!r.ok) throw new Error(j.message||"Unable to load data"); setItems(j.records||[]); }
+    catch(e:any){setError(e.message||"Unable to load data");} finally{setLoading(false);}
+  }
+  useEffect(()=>{load()},[resource,token]);
+
+  async function add(e:React.FormEvent){
+    e.preventDefault(); if(!form.title.trim()) return;
+    try { const r=await fetch(`${API}/platform/${resource}`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({title:form.title,status:form.status,data:{details:form.details}})}); const j=await r.json(); if(!r.ok) throw new Error(j.message||"Unable to save"); setForm({title:"",status:"ACTIVE",details:""}); setItems(x=>[j.record,...x]); }
+    catch(e:any){setError(e.message||"Unable to save");}
+  }
+  async function remove(id:string){
+    if(!confirm("Delete this record?")) return;
+    const r=await fetch(`${API}/platform/${resource}/${id}`,{method:"DELETE",headers:{Authorization:`Bearer ${token}`}}); if(r.ok) setItems(x=>x.filter(i=>i._id!==id));
+  }
+
+  return <div className="space-y-6">
+    <div><h1 className="text-3xl font-black text-brand-blue">{title}</h1><p className="mt-1 text-slate-500">{description}</p></div>
+    {error && <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+    {!riderOnly && <form onSubmit={add} className="card grid gap-3 p-5 md:grid-cols-[1fr_180px_1fr_auto]">
+      <input className="rounded-xl border p-3" placeholder={`${singular} name`} value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/>
+      <select className="rounded-xl border p-3" value={form.status} onChange={e=>setForm({...form,status:e.target.value})}><option>ACTIVE</option><option>PENDING</option><option>PROCESSING</option><option>COMPLETED</option><option>CANCELLED</option></select>
+      <input className="rounded-xl border p-3" placeholder="Details / notes" value={form.details} onChange={e=>setForm({...form,details:e.target.value})}/>
+      <button className="btn-primary" type="submit">Add</button>
+    </form>}
+    {loading ? <div className="card p-8 text-slate-500">Loading...</div> : items.length===0 ? <div className="card p-8 text-slate-500">No {title.toLowerCase()} records yet.</div> : <div className="card overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-slate-50"><tr><th className="p-4">#</th><th className="p-4">Name</th><th className="p-4">Status</th><th className="p-4">Details</th><th className="p-4">Created</th>{canDelete&&<th className="p-4">Action</th>}</tr></thead><tbody>{items.map((i,n)=><tr className="border-t" key={i._id}><td className="p-4">{n+1}</td><td className="p-4 font-semibold">{i.title}</td><td className="p-4"><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold">{i.status}</span></td><td className="max-w-md p-4 text-slate-500">{String(i.data?.details||"")}</td><td className="p-4 text-sm text-slate-500">{i.createdAt?new Date(i.createdAt).toLocaleDateString():"-"}</td>{canDelete&&<td className="p-4"><button onClick={()=>remove(i._id)} className="text-red-600 hover:underline">Delete</button></td>}</tr>)}</tbody></table></div></div>}
+  </div>
+}
